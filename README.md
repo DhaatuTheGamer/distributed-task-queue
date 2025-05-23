@@ -283,3 +283,35 @@ You’ve built a cool system! Here are ideas to make it better:
 ## Acknowledgments
 
 Built with the help from Grok 3 (created by xAI). Thanks for trying my project!
+
+## Security Recommendations
+
+This section outlines important security considerations for this application:
+
+1.  **Dependency Vulnerability Scanning:**
+    *   Regularly scan `requirements.txt` and all dependencies for known vulnerabilities using tools like `pip-audit`, Snyk, or Trivy. Keep dependencies updated to patched versions.
+
+2.  **CSRF Protection:**
+    *   While JWTs are used (which can offer some CSRF protection if tokens are not stored in client-side JavaScript accessible cookies), consider implementing explicit CSRF protection mechanisms, especially if session cookies are used or if there are concerns about token handling.
+
+3.  **Production Error Handling:**
+    *   Ensure that detailed error messages or stack traces, which might reveal sensitive system information, are not exposed to clients in a production environment. Implement robust error handling that logs details server-side but shows generic error messages to users.
+
+4.  **Idempotent Celery Tasks:**
+    *   The Celery configuration in `celery_app.py` uses `task_acks_late = True`. This enhances fault tolerance but means a task could potentially be executed more than once if a worker fails after starting a task but before acknowledging its completion. Ensure that all Celery tasks (like `process_task`) are designed to be idempotent, meaning they can be safely executed multiple times with the same input without causing unintended side effects.
+
+5.  **Secret Management:**
+    *   The `SECRET_KEY` for JWT signing in `main.py` has been modified to be loaded from the `APP_SECRET_KEY` environment variable. Ensure this environment variable is set to a strong, unique, randomly generated key in your production environment. Do not commit the actual secret key to version control.
+
+6.  **Database Security:**
+    *   The application has been updated to remove the hardcoded `fake_users_db`. When integrating a real database for user authentication and other data storage:
+        *   Use strong, unique credentials for database access.
+        *   Limit database user privileges to the minimum required.
+        *   Consider network ACLs or firewalls to restrict database access.
+        *   Use Object-Relational Mappers (ORMs) or parameterized queries to prevent SQL injection vulnerabilities.
+
+7.  **Celery Broker/Backend Security:**
+    *   As noted in `celery_app.py`, secure your Celery broker and backend (e.g., Redis) with passwords, network restrictions, and potentially SSL/TLS if accessed over untrusted networks.
+
+8.  **Rate Limiting with Proxies:**
+    *   As noted in `main.py`, if deploying behind a reverse proxy, ensure the rate limiting mechanism correctly identifies client IPs by checking headers like `X-Forwarded-For`.
