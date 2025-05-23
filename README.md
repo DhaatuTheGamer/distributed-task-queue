@@ -109,6 +109,21 @@ Open them in VS Code to explore the code. Don’t edit them unless you want to c
 
 ---
 
+## Database Integration
+
+This project now uses an SQLite database named `tasks_and_users.db`, which will be automatically created in the root directory of the project when you first run the application.
+
+This database serves two main purposes:
+1.  **User Authentication:** Stores user credentials. On the first startup, a default test user is created with the following credentials if they don't already exist:
+    *   **Username:** `user1`
+    *   **Password:** `password1`
+    You can use these credentials to obtain an access token for testing.
+2.  **Task Persistence:** Stores details and results of all submitted Celery tasks (e.g., `process_task`, `add_numbers`, `simulate_image_processing`). When you query a task's status via the API, the information is retrieved from this database.
+
+The necessary tables (`users` and `tasks`) are also created automatically if they don't exist when the application starts.
+
+---
+
 ## Running the Project
 
 You’ll run three components: Redis (already running in Docker), Celery workers, and the FastAPI server.
@@ -160,7 +175,9 @@ You’ll run three components: Redis (already running in Docker), Celery workers
 
 ## Testing the Project
 
-Use PowerShell to test the system by sending tasks and checking their status. The project uses authentication, so you’ll need a token first.
+While the following sections describe how to test the system using PowerShell, a simpler Web Interface is now available for interactive testing. See the "Web Interface" section below for details. The PowerShell examples remain valid for scripted testing or direct API interaction.
+
+Use PowerShell to test the system by sending tasks and checking their status. The project uses authentication, so you’ll need a token first. The default credentials (`user1`/`password1`) are created in the database on first startup, as described in the "Database Integration" section.
 
 ### Test 1: Get an Access Token
 
@@ -180,11 +197,17 @@ Use PowerShell to test the system by sending tasks and checking their status. Th
    ```
 4. Copy the `access_token`.
 
-### Test 2: Submit a Task
+### Test 2: Submitting Different Task Types
+
+This project now supports multiple task types. Here's how to submit them:
+
+#### a. Generic Processing Task
+
+This is the original example task.
 
 1. Run this command, replacing `your-jwt-token` with the token:
 
-   ```
+   ```powershell
    (Invoke-WebRequest -Uri "http://localhost:8000/tasks/process" -Method POST -Headers @{ "Authorization" = "Bearer your-jwt-token"; "Content-Type" = "application/json" } -Body '{"data": "example data"}').Content | ConvertFrom-Json
    ```
 2. You’ll see:
@@ -194,11 +217,51 @@ Use PowerShell to test the system by sending tasks and checking their status. Th
        "task_id": "some-uuid"
    }
    ```
-3. Copy the `task_id`.
+3. Copy the `task_id` to use in Test 3.
+
+#### b. Process Numbers Task
+
+This task accepts a list of numbers and returns their sum.
+
+-   **Endpoint**: `POST /tasks/process-numbers`
+-   **Authentication**: Required (Bearer Token).
+-   **Request Body**: JSON object with a `numbers` key (array of numbers).
+    Example:
+    ```powershell
+    (Invoke-WebRequest -Uri "http://localhost:8000/tasks/process-numbers" -Method POST -Headers @{ "Authorization" = "Bearer your-jwt-token"; "Content-Type" = "application/json" } -Body '{"numbers": [1, 2, 3.5, 10]}').Content | ConvertFrom-Json
+    ```
+-   **Response**: JSON object with `task_id`.
+    ```json
+    {
+        "task_id": "some-other-uuid"
+    }
+    ```
+    Copy this `task_id` to check its status using the method in Test 3. The expected result, retrieved from the database, would be `{"task_id": "some-other-uuid", "name": "add_numbers", "status": "SUCCESS", "result": "16.5", ...}`. (Note: The exact structure and `status` field value might vary based on Celery version and DB schema).
+
+#### c. Simulate Image Processing Task
+
+This task accepts an image identifier (string) and simulates processing.
+
+-   **Endpoint**: `POST /tasks/process-image`
+-   **Authentication**: Required (Bearer Token).
+-   **Request Body**: JSON object with an `image_id` key (string).
+    Example:
+    ```powershell
+    (Invoke-WebRequest -Uri "http://localhost:8000/tasks/process-image" -Method POST -Headers @{ "Authorization" = "Bearer your-jwt-token"; "Content-Type" = "application/json" } -Body '{"image_id": "img_123.jpg"}').Content | ConvertFrom-Json
+    ```
+-   **Response**: JSON object with `task_id`.
+    ```json
+    {
+        "task_id": "yet-another-uuid"
+    }
+    ```
+    Copy this `task_id` to check its status. The expected result, retrieved from the database, would be `{"task_id": "yet-another-uuid", "name": "simulate_image_processing", "status": "SUCCESS", "result": "Image img_123.jpg processed successfully.", ...}`.
 
 ### Test 3: Check Task Status
 
-1. Wait 5 seconds (the task takes 5 seconds to process).
+This endpoint now retrieves task information directly from the SQLite database.
+
+1. Wait for the task to process (e.g., 5 seconds for the original generic task, 1 second for image processing).
 2. Run, replacing `some-uuid` and `your-jwt-token`:
 
    ```
@@ -216,10 +279,46 @@ Use PowerShell to test the system by sending tasks and checking their status. Th
 
      ```json
      {
-         "status": "completed",
-         "result": "Processed: example data"
+         "task_id": "some-uuid",
+         "name": "process_task", 
+         "status": "SUCCESS", // Or other status like PENDING, FAILURE
+         "result": "Processed: example data",
+         "created_at": "YYYY-MM-DDTHH:MM:SS.ffffff",
+         "completed_at": "YYYY-MM-DDTHH:MM:SS.ffffff" // Or null if pending/failed
      }
      ```
+     The exact fields returned will match the `TaskResultModel` and the data stored in the `tasks` table.
+
+---
+
+## Web Interface
+
+A simple web interface is available to interact with the task submission system. Once the FastAPI server is running, you can access this UI by navigating to:
+
+[http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+
+The interface provides the following functionalities:
+
+1.  **User Login:**
+    *   Enter your credentials to obtain an API token.
+    *   For initial testing, you can use the default user:
+        *   **Username:** `user1`
+        *   **Password:** `password1`
+    *   The obtained API token will be displayed and used automatically for subsequent requests.
+
+2.  **Task Submission:**
+    *   Once logged in, forms will appear for submitting each type of supported task:
+        *   Generic Process Task
+        *   Add Numbers Task
+        *   Simulate Image Processing Task
+    *   Fill in the required data and click the respective submit button.
+    *   The API response, including the `task_id`, will be displayed.
+
+3.  **Check Task Status:**
+    *   Enter a `task_id` obtained from a task submission.
+    *   Click "Check Status" to retrieve and display the latest status and result for that task from the database.
+
+This web UI offers a more user-friendly way to test and use the task queue compared to command-line tools.
 
 ---
 
@@ -315,3 +414,41 @@ This section outlines important security considerations for this application:
 
 8.  **Rate Limiting with Proxies:**
     *   As noted in `main.py`, if deploying behind a reverse proxy, ensure the rate limiting mechanism correctly identifies client IPs by checking headers like `X-Forwarded-For`.
+
+## New Task Endpoints
+
+These tasks require authentication (Bearer Token).
+
+### Process Numbers Task
+- **Endpoint:** `POST /tasks/process-numbers`
+- **Description:** Accepts a list of numbers and returns their sum.
+- **Request Body:** JSON object with a `numbers` key (array of numbers).
+  ```json
+  {
+      "numbers": [1, 2, 3.5, 4]
+  }
+  ```
+- **Response:** JSON object with `task_id`.
+  ```json
+  {
+      "task_id": "some-celery-task-id"
+  }
+  ```
+- **Result via `/tasks/{task_id}`:** The sum of the numbers, retrieved from the database.
+
+### Simulate Image Processing Task
+- **Endpoint:** `POST /tasks/process-image`
+- **Description:** Accepts an image identifier (string) and simulates processing.
+- **Request Body:** JSON object with an `image_id` key (string).
+  ```json
+  {
+      "image_id": "image_example_001.png"
+  }
+  ```
+- **Response:** JSON object with `task_id`.
+  ```json
+  {
+      "task_id": "another-celery-task-id"
+  }
+  ```
+- **Result via `/tasks/{task_id}`:** A message like "Image image_example_001.png processed successfully.", retrieved from the database.

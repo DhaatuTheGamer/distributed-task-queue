@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Submission UI</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h2, h3 { color: #333; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type="text"], input[type="password"], textarea, input[type="number"] {
+            width: calc(100% - 22px); padding: 10px; margin-top: 5px; border-radius: 4px; border: 1px solid #ddd;
+        }
+        button {
+            background-color: #007bff; color: white; padding: 10px 15px; border: none;
+            border-radius: 4px; cursor: pointer; margin-top: 15px; font-size: 16px;
+        }
+        button:hover { background-color: #0056b3; }
+        .task-form { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+        #apiToken, #taskResponse, #statusResponse {
+            margin-top: 10px; padding: 10px; background-color: #e9ecef; border-radius: 4px;
+            white-space: pre-wrap; word-wrap: break-word;
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Task Submission Interface</h2>
+
+        <!-- Login Section -->
+        <div class="task-form">
+            <h3>User Login</h3>
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" value="user1">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" value="password1">
+            <button id="loginButton">Login</button>
+            <h4>API Token:</h4>
+            <pre id="apiToken"></pre>
+        </div>
+
+        <!-- Task Submission Forms (initially hidden) -->
+        <div id="taskFormsContainer" class="hidden">
+            <!-- Generic Process Task -->
+            <div class="task-form">
+                <h3>Submit Generic Task</h3>
+                <label for="genericData">Data:</label>
+                <textarea id="genericData" name="genericData">Sample task data</textarea>
+                <button onclick="submitTask('process_task', {data: document.getElementById('genericData').value})">Submit Generic Task</button>
+            </div>
+
+            <!-- Add Numbers Task -->
+            <div class="task-form">
+                <h3>Submit Add Numbers Task</h3>
+                <label for="numbersData">Numbers (comma-separated):</label>
+                <input type="text" id="numbersData" name="numbersData" value="1,2,3.5,4">
+                <button onclick="submitTask('add_numbers', {numbers: document.getElementById('numbersData').value.split(',').map(Number)})">Submit Add Numbers Task</button>
+            </div>
+
+            <!-- Simulate Image Processing Task -->
+            <div class="task-form">
+                <h3>Submit Image Processing Task</h3>
+                <label for="imageData">Image ID:</label>
+                <input type="text" id="imageData" name="imageData" value="image_test_001.jpg">
+                <button onclick="submitTask('simulate_image_processing', {image_id: document.getElementById('imageData').value})">Submit Image Task</button>
+            </div>
+
+            <h4>Last Task Submission Response:</h4>
+            <pre id="taskResponse"></pre>
+        </div>
+
+        <!-- Task Status Section (initially hidden) -->
+        <div id="taskStatusContainer" class="hidden">
+            <h3>Check Task Status</h3>
+            <label for="taskIdInput">Task ID:</label>
+            <input type="text" id="taskIdInput" name="taskIdInput">
+            <button id="checkStatusButton">Check Status</button>
+            <h4>Task Status:</h4>
+            <pre id="statusResponse"></pre>
+        </div>
+    </div>
+
+    <script>
+    let apiToken = null;
+
+    const loginButton = document.getElementById('loginButton');
+    const taskFormsContainer = document.getElementById('taskFormsContainer');
+    const taskStatusContainer = document.getElementById('taskStatusContainer');
+    const apiTokenDisplay = document.getElementById('apiToken');
+    const taskResponseDisplay = document.getElementById('taskResponse');
+    const statusResponseDisplay = document.getElementById('statusResponse');
+    const checkStatusButton = document.getElementById('checkStatusButton');
+
+    // Login functionality
+    loginButton.addEventListener('click', async () => {
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        const formData = new URLSearchParams();
+        formData.append('username', username);
+        formData.append('password', password);
+
+        try {
+            const response = await fetch('/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            apiToken = data.access_token;
+            apiTokenDisplay.textContent = `Bearer ${apiToken}`;
+            taskFormsContainer.classList.remove('hidden');
+            taskStatusContainer.classList.remove('hidden');
+            loginButton.textContent = 'Login Successful';
+            loginButton.disabled = true;
+        } catch (error) {
+            console.error('Login error:', error);
+            apiTokenDisplay.textContent = `Error: ${error.message}`;
+            apiToken = null;
+            taskFormsContainer.classList.add('hidden');
+            taskStatusContainer.classList.add('hidden');
+        }
+    });
+
+    // Generic function to submit tasks
+    async function submitTask(taskType, taskPayload) {
+        if (!apiToken) {
+            taskResponseDisplay.textContent = 'Error: Not logged in. Please login first.';
+            return;
+        }
+
+        let endpoint = '';
+        switch (taskType) {
+            case 'process_task':
+                endpoint = '/tasks/process';
+                break;
+            case 'add_numbers':
+                endpoint = '/tasks/process-numbers';
+                break;
+            case 'simulate_image_processing':
+                endpoint = '/tasks/process-image';
+                break;
+            default:
+                taskResponseDisplay.textContent = 'Error: Unknown task type.';
+                return;
+        }
+
+        try {
+            taskResponseDisplay.textContent = 'Submitting task...';
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiToken}`
+                },
+                body: JSON.stringify(taskPayload)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            taskResponseDisplay.textContent = JSON.stringify(data, null, 2);
+            // Optionally auto-fill task ID input
+            if (data.task_id) {
+                document.getElementById('taskIdInput').value = data.task_id;
+            }
+        } catch (error) {
+            console.error('Task submission error:', error);
+            taskResponseDisplay.textContent = `Error: ${error.message}`;
+        }
+    }
+
+    // Check task status functionality
+    checkStatusButton.addEventListener('click', async () => {
+        if (!apiToken) {
+            statusResponseDisplay.textContent = 'Error: Not logged in. Please login first.';
+            return;
+        }
+        const taskId = document.getElementById('taskIdInput').value;
+        if (!taskId) {
+            statusResponseDisplay.textContent = 'Error: Please enter a Task ID.';
+            return;
+        }
+
+        try {
+            statusResponseDisplay.textContent = 'Checking status...';
+            const response = await fetch(`/tasks/${taskId}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            statusResponseDisplay.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+            console.error('Check status error:', error);
+            statusResponseDisplay.textContent = `Error: ${error.message}`;
+        }
+    });
+
+    // Expose submitTask globally if buttons use onclick="submitTask(...)" directly in HTML
+    // If event listeners were added in JS for each button, this wouldn't be needed.
+    window.submitTask = submitTask;
+
+    </script>
+</body>
+</html>
