@@ -1,4 +1,5 @@
 from celery import Celery
+import time # For time.sleep()
 
 # Initialize Celery with Redis as the broker and result backend
 app = Celery('tasks', broker='redis://localhost:6379/0', backend='redis://localhost:6379/0')
@@ -34,6 +35,27 @@ def process_task(self, data):
     except Exception as exc:
         # Retry on failure, up to 3 times with a 60-second delay
         raise self.retry(exc=exc)
+
+@app.task(queue='default')
+def add_numbers(numbers):
+    if not isinstance(numbers, list):
+        # It's good practice for Celery tasks to raise exceptions that Celery can handle
+        # or return a serializable error state. Raising TypeError is fine.
+        raise TypeError("Input must be a list of numbers.")
+    
+    for num in numbers:
+        if not isinstance(num, (int, float)):
+            raise TypeError(f"List contains non-numeric element: {num}")
+            
+    return sum(numbers)
+
+@app.task(queue='default')
+def simulate_image_processing(image_id):
+    if not isinstance(image_id, str) or not image_id.strip():
+        # Raising ValueError is appropriate here.
+        raise ValueError("image_id must be a non-empty string.")
+    time.sleep(1)  # Simulate image processing time
+    return f"Image {image_id} processed successfully."
 
 # SECURITY BEST PRACTICES for Broker/Backend (Redis):
 # 1. Secure Redis with a strong password: Modify the broker/backend URLs to include the password,
